@@ -252,15 +252,16 @@ def show_bi_dashboard(data, processed_data):
     st.plotly_chart(fig2, use_container_width=True)
 
     # Example 3: Bar Chart of Purpose Count
-    fig3 = px.bar(data['Purpose'].value_counts().reset_index(), x='index', y='Purpose',
-                  title="Loan Purpose Frequency", labels={"index": "Purpose", "Purpose": "Count"})
+    df_purpose = data['Purpose'].value_counts().reset_index()
+    df_purpose.columns = ['Purpose', 'Count']  # Rename columns for clarity
+    fig3 = px.bar(df_purpose, x='Purpose', y='Count',
+                  title="Loan Purpose Frequency", labels={"Purpose": "Purpose", "Count": "Count"})
     st.plotly_chart(fig3, use_container_width=True)
 
     # Example 4: Pie Chart of Savings Account Distribution
     fig4 = px.pie(data, names="Saving accounts", title="Saving Accounts Distribution")
     st.plotly_chart(fig4, use_container_width=True)
 
-    st.write("These interactive charts provide an overview of your data. You can further customize these plots to make your dashboard even more 'shiny'.")
 
 
 # ---------------------------
