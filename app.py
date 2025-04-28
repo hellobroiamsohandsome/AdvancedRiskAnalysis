@@ -1,4 +1,3 @@
-
 # app.py
 import pandas as pd
 import numpy as np
@@ -77,7 +76,7 @@ def main():
     
     # Sidebar with QR Code
     st.sidebar.title("Dashboard Access")
-    qr_img = generate_qr('http://localhost:8501')
+    qr_img = generate_qr('https://advancedriskanalysis-frp3xdyvnbex8a4rdhqk8j.streamlit.app/')
     st.sidebar.image(qr_img, caption="Scan QR to Access")
     
     # Main content
@@ -175,10 +174,11 @@ def main():
             
             submitted = st.form_submit_button("Assess Risk")
             
+        # In the Prediction Interface section, replace the block that shows the result with:
+        
         if submitted:
             # Create age group
-            age_group = pd.cut([age], bins=age_params['bins'], 
-                             labels=age_params['labels'])[0]
+            age_group = pd.cut([age], bins=age_params['bins'], labels=age_params['labels'])[0]
             
             # Create input dataframe
             input_data = pd.DataFrame({
@@ -193,30 +193,28 @@ def main():
                 'AgeGroup': [age_group]
             })
             
-        
             # Encode categorical variables
             for col in label_encoders:
                 input_data[col] = label_encoders[col].transform(input_data[col].astype(str))
             
-            # Add these lines to ensure the column order matches training:
+            # Ensure the column order matches training
             expected_columns = processed_data.drop(['Risk', 'Age'], axis=1).columns
             input_data = input_data[expected_columns]
-        
-
-                
-            # Predict
-            prediction = model.predict(input_data)
+            
+            # Predict probability
             probability = model.predict_proba(input_data)[0][1]
             
-            # Display result
-            if prediction[0] == 1:
+            # Let the user adjust the decision threshold
+            risk_threshold = st.sidebar.slider("Risk Threshold", min_value=0.0, max_value=1.0, value=0.5, step=0.05)
+            
+            # Determine risk label based on threshold
+            if probability >= risk_threshold:
                 st.sidebar.error(f"High Risk Alert! (Probability: {probability:.2%})")
             else:
                 st.sidebar.success(f"Low Risk (Probability: {probability:.2%})")
-                
+            
             st.sidebar.write("Key Factors Contributing to Risk:")
-            feature_importance = pd.Series(model.named_steps['classifier'].feature_importances_, 
-                                index=expected_columns)
+            feature_importance = pd.Series(model.named_steps['classifier'].feature_importances_, index=expected_columns)
             top_features = feature_importance.nlargest(3)
             for feat, imp in top_features.items():
                 st.sidebar.write(f"- {feat}: {imp:.2f}")
