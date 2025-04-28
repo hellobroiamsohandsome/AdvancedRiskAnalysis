@@ -15,6 +15,8 @@ from PIL import Image
 import joblib
 import opendatasets as od
 import os
+import plotly.express as px
+
 
 # ---------------------------
 # Data Loading & Preprocessing
@@ -233,6 +235,35 @@ def generate_qr(url):
     return Image.open("qr_code.png")
 
 # ---------------------------
+# Shiny Dashboard
+# ---------------------------
+
+def show_bi_dashboard(data, processed_data):
+    st.title("🔍 BI Dashboard")
+    st.write("Explore key trends and insights from the credit data.")
+
+    # Example 1: Distribution of Credit Amount
+    fig1 = px.histogram(data, x="Credit amount", nbins=30, title="Distribution of Credit Amount")
+    st.plotly_chart(fig1, use_container_width=True)
+
+    # Example 2: Age vs. Credit Amount Scatter Plot colored by Risk
+    fig2 = px.scatter(data, x="Age", y="Credit amount", color=data["Risk"].map({0:"Good",1:"Bad"}),
+                      title="Age vs. Credit Amount", labels={"color": "Risk"})
+    st.plotly_chart(fig2, use_container_width=True)
+
+    # Example 3: Bar Chart of Purpose Count
+    fig3 = px.bar(data['Purpose'].value_counts().reset_index(), x='index', y='Purpose',
+                  title="Loan Purpose Frequency", labels={"index": "Purpose", "Purpose": "Count"})
+    st.plotly_chart(fig3, use_container_width=True)
+
+    # Example 4: Pie Chart of Savings Account Distribution
+    fig4 = px.pie(data, names="Saving accounts", title="Saving Accounts Distribution")
+    st.plotly_chart(fig4, use_container_width=True)
+
+    st.write("These interactive charts provide an overview of your data. You can further customize these plots to make your dashboard even more 'shiny'.")
+
+
+# ---------------------------
 # Main App Function with Top Navigation Tabs
 # ---------------------------
 def main():
@@ -242,13 +273,15 @@ def main():
     processed_data = preprocess_data(data)
     
     # Use top horizontal tabs for navigation, user-friendly for mobile devices.
-    tabs = st.tabs(["Home", "Train Model", "Risk Prediction"])
+    tabs = st.tabs(["Home", "Train Model", "Risk Prediction", "BI Dashboard"])
     with tabs[0]:
         show_home(data, processed_data)
     with tabs[1]:
         show_train_model(data, processed_data)
     with tabs[2]:
         show_risk_prediction(data, processed_data)
+    with tabs[3]:
+        show_bi_dashboard(data, processed_data)
 
 if __name__ == "__main__":
     main()
