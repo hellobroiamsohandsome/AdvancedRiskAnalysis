@@ -1,0 +1,15 @@
+# Instead of installing packages directly in app.py, create a requirements.txt file 
+# and add the following package list. This file can then be used in your deployment
+# environment to automatically install all dependencies via:
+# pip install -r requirements.txt
+
+streamlit
+imbalanced-learn
+scikit-learn
+pandas
+matplotlib
+seaborn
+qrcode
+Pillow
+opendatasets
+joblib
