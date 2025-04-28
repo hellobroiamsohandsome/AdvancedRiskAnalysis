@@ -53,8 +53,7 @@ def train_model(X_train, y_train):
         'classifier__min_samples_split': [2, 5]
     }
 
-    grid_search = GridSearchCV(pipeline, param_grid, cv=5, 
-                             scoring='roc_auc', n_jobs=-1)
+    grid_search = GridSearchCV(pipeline, param_grid, cv=5, scoring='roc_auc', n_jobs=-1)
     grid_search.fit(X_train, y_train)
     
     return grid_search.best_estimator_
@@ -69,12 +68,11 @@ def show_home(data, processed_data):
     st.write("""
         - Handled missing values in savings/checking accounts  
         - Created age groups for better risk segmentation  
-        - Encoded categorical variables using label encoding  
-        - Applied SMOTE to handle class imbalance  
+        - Categorical variables encoded with label encoding  
+        - SMOTE applied to handle class imbalance  
     """)
     st.write("Processed Data Preview:", processed_data.head())
     
-    # Show QR code in Home page as well
     st.sidebar.title("Dashboard Access")
     qr_img = generate_qr('https://advancedriskanalysis-frp3xdyvnbex8a4rdhqk8j.streamlit.app/')
     st.sidebar.image(qr_img, caption="Scan QR to Access")
@@ -82,11 +80,11 @@ def show_home(data, processed_data):
 def show_train_model(data, processed_data):
     st.title("Train Model")
     with st.spinner("Training Advanced Risk Model..."):
-        # Split data
+        # Prepare features & target
         X = processed_data.drop(['Risk', 'Age'], axis=1)
         y = processed_data['Risk']
 
-        # Label encoding
+        # Label encoding for categorical columns
         label_encoders = {}
         categorical_cols = ['Sex', 'Job', 'Housing', 'Saving accounts', 
                               'Checking account', 'Purpose', 'AgeGroup']
@@ -95,30 +93,29 @@ def show_train_model(data, processed_data):
             X[col] = le.fit_transform(X[col].astype(str))
             label_encoders[col] = le
 
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, stratify=y, random_state=42)
+        # Split data with fixed random state for reproducibility
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=42)
 
         # Handle class imbalance
         smote = SMOTE(random_state=42)
         X_res, y_res = smote.fit_resample(X_train, y_train)
 
-        # Train model
+        # Train model using grid search
         model = train_model(X_res, y_res)
 
-        # Evaluate
+        # Evaluate model on test set
         y_pred = model.predict(X_test)
         y_proba = model.predict_proba(X_test)[:, 1]
 
-        # Save artifacts
+        # Save trained model and artifacts
         joblib.dump(model, 'model.pkl')
         joblib.dump(label_encoders, 'label_encoders.pkl')
-        joblib.dump({'bins': [0, 25, 45, 60, 120], 
-                     'labels': ['0-25', '26-45', '46-60', '60+']}, 
+        joblib.dump({'bins': [0, 25, 45, 60, 120],
+                     'labels': ['0-25', '26-45', '46-60', '60+']},
                     'age_params.pkl')
 
     st.success("Model trained successfully!")
-
-    st.subheader("Model Performance")
+    st.subheader("Model Performance on Test Data")
     col1, col2 = st.columns(2)
     with col1:
         st.write("**ROC Curve**")
@@ -141,10 +138,22 @@ def show_train_model(data, processed_data):
 
 def show_risk_prediction(data, processed_data):
     st.title("Risk Prediction")
-    st.write("Set a risk threshold and then assess the risk for a loan application.")
-    
-    # Let the user set the risk threshold first
-    risk_threshold = st.slider("Risk Threshold", min_value=0.0, max_value=1.0, value=0.5, step=0.05)
+    st.write("""
+        This section predicts the probability that a loan application is high risk.
+        The **Probability** is the model’s confidence that the application is high risk.
+        For example, a probability of 14.33% means the model believes there is a 14.33% chance 
+        the application is high risk.
+        
+        You can adjust the threshold sliders below. The risk levels are defined as:
+        - Low Risk: Probability is below the *Medium Risk* threshold.
+        - Medium Risk: Probability is between *Medium Risk* and *High Risk* thresholds.
+        - High Risk: Probability is between *High Risk* and *Severe High Risk* thresholds.
+        - Severe High Risk: Probability is at or above the *Severe High Risk* threshold.
+    """)
+    # Let the user set thresholds
+    medium_threshold = st.slider("Medium Risk Threshold", min_value=0.0, max_value=1.0, value=0.3, step=0.05)
+    high_threshold = st.slider("High Risk Threshold", min_value=0.0, max_value=1.0, value=0.6, step=0.05)
+    severe_threshold = st.slider("Severe High Risk Threshold", min_value=0.0, max_value=1.0, value=0.8, step=0.05)
     
     # Display the prediction form
     with st.form("prediction_form"):
@@ -157,16 +166,15 @@ def show_risk_prediction(data, processed_data):
         submitted = st.form_submit_button("Assess Risk")
     
     if submitted:
-        # Load model artifacts
         if os.path.exists('model.pkl'):
             model = joblib.load('model.pkl')
             label_encoders = joblib.load('label_encoders.pkl')
             age_params = joblib.load('age_params.pkl')
             
-            # Create age group
+            # Create age group from input
             age_group = pd.cut([age], bins=age_params['bins'], labels=age_params['labels'])[0]
             
-            # Create input dataframe
+            # Create a single-row input dataframe
             input_data = pd.DataFrame({
                 'Sex': [data['Sex'].mode()[0]],
                 'Job': [data['Job'].mode()[0]],
@@ -179,7 +187,7 @@ def show_risk_prediction(data, processed_data):
                 'AgeGroup': [age_group]
             })
             
-            # Encode categorical variables
+            # Encode categorical variables using stored label encoders
             for col in label_encoders:
                 input_data[col] = label_encoders[col].transform(input_data[col].astype(str))
             
@@ -190,11 +198,23 @@ def show_risk_prediction(data, processed_data):
             # Predict probability
             probability = model.predict_proba(input_data)[0][1]
             
-            # Determine risk label based on threshold
-            if probability >= risk_threshold:
-                st.error(f"High Risk Alert! (Probability: {probability:.2%})")
+            # Determine risk level based on thresholds
+            if probability < medium_threshold:
+                risk_level = "Low Risk"
+            elif probability < high_threshold:
+                risk_level = "Medium Risk"
+            elif probability < severe_threshold:
+                risk_level = "High Risk"
             else:
-                st.success(f"Low Risk (Probability: {probability:.2%})")
+                risk_level = "Severe High Risk"
+            
+            # Terminal display with appropriate alert
+            if risk_level == "Low Risk":
+                st.success(f"{risk_level} (Probability: {probability:.2%})")
+            elif risk_level == "Medium Risk":
+                st.warning(f"{risk_level} (Probability: {probability:.2%})")
+            else:
+                st.error(f"{risk_level} (Probability: {probability:.2%})")
             
             st.write("Key Factors Contributing to Risk:")
             feature_importance = pd.Series(model.named_steps['classifier'].feature_importances_, index=expected_columns)
@@ -203,6 +223,54 @@ def show_risk_prediction(data, processed_data):
                 st.write(f"- {feat}: {imp:.2f}")
         else:
             st.error("Model not found! Please train the model first.")
+
+def show_test_evaluation(data, processed_data):
+    st.title("Test Data Evaluation")
+    st.write("""
+        This section uses a portion of your dataset as test data to evaluate the performance 
+        of your trained model. It displays key performance metrics such as the ROC AUC score, 
+        confusion matrix, and classification report.
+    """)
+    if os.path.exists('model.pkl'):
+        model = joblib.load('model.pkl')
+        label_encoders = joblib.load('label_encoders.pkl')
+        
+        # Prepare features & target from the processed data
+        X = processed_data.drop(['Risk', 'Age'], axis=1)
+        y = processed_data['Risk']
+        
+        # Encode categorical variables using stored label encoders
+        categorical_cols = ['Sex', 'Job', 'Housing', 'Saving accounts', 'Checking account', 'Purpose', 'AgeGroup']
+        for col in categorical_cols:
+            X[col] = label_encoders[col].transform(X[col].astype(str))
+        
+        # Reproduce the same train-test split as before
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=42)
+        
+        # Predict on test data
+        y_pred = model.predict(X_test)
+        y_proba = model.predict_proba(X_test)[:, 1]
+        
+        st.subheader("Test Data Performance")
+        st.write(f"**ROC AUC Score:** {roc_auc_score(y_test, y_proba):.2f}")
+        st.write("**Classification Report:**")
+        st.code(classification_report(y_test, y_pred))
+        
+        st.write("**Confusion Matrix:**")
+        cm = confusion_matrix(y_test, y_pred)
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
+        st.pyplot(plt)
+        
+        st.write("**ROC Curve:**")
+        fpr, tpr, _ = roc_curve(y_test, y_proba)
+        plt.figure()
+        plt.plot(fpr, tpr, color='darkorange', lw=2)
+        plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        st.pyplot(plt)
+    else:
+        st.error("Model not found! Please train the model first.")
 
 # ---------------------------
 # Auxiliary Functions
@@ -226,12 +294,12 @@ def generate_qr(url):
 def main():
     st.set_page_config(page_title="Advanced Credit Risk Dashboard", layout="wide")
     
-    # Load data and preprocess
+    # Load and preprocess data
     data = load_data()
     processed_data = preprocess_data(data)
     
     # Sidebar navigation for multipage
-    page = st.sidebar.radio("Navigate", ("Home", "Train Model", "Risk Prediction"))
+    page = st.sidebar.radio("Navigate", ("Home", "Train Model", "Risk Prediction", "Test Evaluation"))
     
     if page == "Home":
         show_home(data, processed_data)
@@ -239,6 +307,8 @@ def main():
         show_train_model(data, processed_data)
     elif page == "Risk Prediction":
         show_risk_prediction(data, processed_data)
+    elif page == "Test Evaluation":
+        show_test_evaluation(data, processed_data)
 
 if __name__ == "__main__":
     main()
