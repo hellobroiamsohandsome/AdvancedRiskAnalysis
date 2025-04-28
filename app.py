@@ -1,4 +1,3 @@
-pip install streamlit imbalanced-learn scikit-learn pandas matplotlib seaborn qrcode pillow opendatasets joblib
 
 # app.py
 import pandas as pd
