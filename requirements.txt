@@ -13,3 +13,4 @@ qrcode
 Pillow
 opendatasets
 joblib
+plotly  
