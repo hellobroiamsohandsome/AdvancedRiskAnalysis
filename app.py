@@ -80,63 +80,104 @@ def show_home(data, processed_data):
     qr_img = generate_qr('https://advancedriskanalysis-frp3xdyvnbex8a4rdhqk8j.streamlit.app/')
     st.image(qr_img, caption="Scan QR to Access", width=150)
 
-def show_train_model(data, processed_data):
-    st.title("Train Model")
-    with st.spinner("Training Advanced Risk Model..."):
-        X = processed_data.drop(['Risk', 'Age'], axis=1)
-        y = processed_data['Risk']
-
-        # Label encoding for categorical columns
-        label_encoders = {}
-        categorical_cols = ['Sex', 'Job', 'Housing', 'Saving accounts', 
-                              'Checking account', 'Purpose', 'AgeGroup']
-        for col in categorical_cols:
-            le = LabelEncoder()
-            X[col] = le.fit_transform(X[col].astype(str))
-            label_encoders[col] = le
-
-        # Split data with reproducibility
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, stratify=y, random_state=42)
-
-        # Handle class imbalance
-        smote = SMOTE(random_state=42)
-        X_res, y_res = smote.fit_resample(X_train, y_train)
-
-        # Train model using grid search
-        model = train_model(X_res, y_res)
-
-        y_pred = model.predict(X_test)
-        y_proba = model.predict_proba(X_test)[:, 1]
-
-        # Save artifacts for later prediction
-        joblib.dump(model, 'model.pkl')
-        joblib.dump(label_encoders, 'label_encoders.pkl')
-        joblib.dump({'bins': [0, 25, 45, 60, 120],
-                     'labels': ['0-25', '26-45', '46-60', '60+']},
-                    'age_params.pkl')
-
-    st.success("Model trained successfully!")
-    st.subheader("Model Performance on Test Data")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.write("**ROC Curve**")
-        fpr, tpr, _ = roc_curve(y_test, y_proba)
-        plt.figure()
-        plt.plot(fpr, tpr, color='darkorange', lw=2)
-        plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
-        plt.xlabel('False Positive Rate')
-        plt.ylabel('True Positive Rate')
-        st.pyplot(plt)
-    with col2:
-        st.write("**Confusion Matrix**")
-        cm = confusion_matrix(y_test, y_pred)
-        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
-        st.pyplot(plt)
-
-    st.write(f"**ROC AUC Score:** {roc_auc_score(y_test, y_proba):.2f}")
-    st.write("**Classification Report:**")
-    st.code(classification_report(y_test, y_pred))
+def show_bi_dashboard(data, processed_data):
+    st.title("🔍 BI Dashboard")
+    st.write("Explore key trends and insights from the credit data. Use the filters below to refine your view.")
+    
+    # Filters in an expander (only on BI Dashboard tab)
+    with st.expander("Filters", expanded=True):
+        selected_purpose = st.multiselect(
+            "Select Loan Purpose",
+            options=data["Purpose"].unique(),
+            default=list(data["Purpose"].unique())
+        )
+        # Map risk values to descriptive labels
+        risk_map = {0: "Good", 1: "Bad"}
+        data["RiskLabel"] = data["Risk"].map(risk_map)
+        selected_risk = st.multiselect(
+            "Select Risk",
+            options=["Good", "Bad"],
+            default=["Good", "Bad"]
+        )
+    
+    # Filter data according to the selections
+    filtered_data = data[
+        (data["Purpose"].isin(selected_purpose)) &
+        (data["RiskLabel"].isin(selected_risk))
+    ]
+    
+    # Chart 1: Distribution of Credit Amount
+    fig1 = px.histogram(
+        filtered_data, x="Credit amount", nbins=30, 
+        title="Distribution of Credit Amount"
+    )
+    st.plotly_chart(fig1, use_container_width=True)
+    
+    # Chart 2: Age vs. Credit Amount Scatter Plot colored by Risk
+    fig2 = px.scatter(
+        filtered_data, x="Age", y="Credit amount", 
+        color=filtered_data["RiskLabel"],
+        title="Age vs. Credit Amount", 
+        labels={"color": "Risk"}
+    )
+    st.plotly_chart(fig2, use_container_width=True)
+    
+    # Chart 3: Bar Chart of Loan Purpose Frequency
+    df_purpose = filtered_data['Purpose'].value_counts().reset_index()
+    df_purpose.columns = ['Purpose', 'Count']  # Rename columns for clarity
+    fig3 = px.bar(
+        df_purpose, x='Purpose', y='Count',
+        title="Loan Purpose Frequency", 
+        labels={"Purpose": "Purpose", "Count": "Count"}
+    )
+    st.plotly_chart(fig3, use_container_width=True)
+    
+    # Chart 4: Pie Chart of Savings Account Distribution
+    fig4 = px.pie(
+        filtered_data, names="Saving accounts", 
+        title="Saving Accounts Distribution"
+    )
+    st.plotly_chart(fig4, use_container_width=True)
+    
+    # Additional Chart 5: Distribution of Age
+    fig5 = px.histogram(
+        filtered_data, x="Age", nbins=20, 
+        title="Distribution of Age"
+    )
+    st.plotly_chart(fig5, use_container_width=True)
+    
+    # Additional Chart 6: Box Plot of Credit Amount by Risk
+    fig6 = px.box(
+        filtered_data, x="RiskLabel", y="Credit amount",
+        title="Credit Amount by Risk Level", 
+        labels={"RiskLabel": "Risk Level", "Credit amount": "Credit Amount (€)"}
+    )
+    st.plotly_chart(fig6, use_container_width=True)
+    
+    # Additional Chart 7: Box Plot of Credit Amount by Loan Purpose
+    fig7 = px.box(
+        filtered_data, x="Purpose", y="Credit amount",
+        title="Credit Amount by Loan Purpose", 
+        labels={"Purpose": "Loan Purpose", "Credit amount": "Credit Amount (€)"}
+    )
+    st.plotly_chart(fig7, use_container_width=True)
+    
+    # Additional Chart 8: Treemap of Loan Purposes by Total Credit Amount
+    fig8 = px.treemap(
+        filtered_data, path=['Purpose'], values='Credit amount',
+        title="Treemap of Loan Purposes by Total Credit Amount"
+    )
+    st.plotly_chart(fig8, use_container_width=True)
+    
+    # Additional Chart 9: Correlation Heatmap (using seaborn)
+    # Select only the numeric columns
+    corr = filtered_data.select_dtypes(include=[np.number]).corr()
+    fig9, ax = plt.subplots(figsize=(8,6))
+    sns.heatmap(corr, annot=True, cmap='coolwarm', ax=ax)
+    plt.title("Correlation Heatmap")
+    st.pyplot(fig9)
+    
+    st.write("These interactive charts provide a dynamic view of your credit data. Adjust the filters above to explore different segments.")
 
 def show_risk_prediction(data, processed_data):
     st.title("Risk Prediction")
@@ -144,7 +185,7 @@ def show_risk_prediction(data, processed_data):
         This section predicts the probability that a loan application is high risk.
         The **Probability** is the model’s confidence that the application is high risk.
         For example, a probability of 14.33% means the model believes there is a 14.33% chance 
-        the application is high risk.
+        the application is likely to default on his/her loan.
         
         Adjust the threshold sliders below to categorize the risk into:
         - Low Risk  
@@ -152,10 +193,10 @@ def show_risk_prediction(data, processed_data):
         - High Risk  
         - Severe High Risk
     """)
-    # Set three threshold values
+    # Set three threshold values with dependencies:
     medium_threshold = st.slider("Medium Risk Threshold", min_value=0.0, max_value=1.0, value=0.3, step=0.05)
-    high_threshold = st.slider("High Risk Threshold", min_value=0.0, max_value=1.0, value=0.6, step=0.05)
-    severe_threshold = st.slider("Severe High Risk Threshold", min_value=0.0, max_value=1.0, value=0.8, step=0.05)
+    high_threshold = st.slider("High Risk Threshold", min_value=medium_threshold, max_value=1.0, value=0.6, step=0.05)
+    severe_threshold = st.slider("Severe High Risk Threshold", min_value=high_threshold, max_value=1.0, value=0.8, step=0.05)
     
     with st.form("prediction_form"):
         st.subheader("Loan Application Details")
@@ -193,7 +234,7 @@ def show_risk_prediction(data, processed_data):
             
             probability = model.predict_proba(input_data)[0][1]
             
-            # Split prediction into four distinct risk categories
+            # Split prediction into four distinct risk categories based on thresholds
             if probability < medium_threshold:
                 risk_level = "Low Risk"
             elif probability < high_threshold:
