@@ -4,7 +4,7 @@ from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
-from sklearn.metrics import roc_auc_score, accuracy_score, confusion_matrix
+from sklearn.metrics import roc_auc_score, accuracy_score, confusion_matrix, roc_curve
 from imblearn.over_sampling import SMOTE
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -88,18 +88,56 @@ def train_model_page(data, processed_data):
     st.write("Model saved. You can now use the 'Risk Prediction' tab to assess risk.")
     
     # ---------------------------
-    # Test Data Validation (Recovery of deleted part)
+    # Test Data Validation
     # ---------------------------
     predictions = model.predict(X_test)
-    roc_auc = roc_auc_score(y_test, model.predict_proba(X_test)[:, 1])
+    pred_probs = model.predict_proba(X_test)[:, 1]
+    roc_auc = roc_auc_score(y_test, pred_probs)
     accuracy = accuracy_score(y_test, predictions)
     conf_mat = confusion_matrix(y_test, predictions)
     
+    # Compute ROC Curve
+    fpr, tpr, thresholds = roc_curve(y_test, pred_probs)
+    
+    # Check view mode from the session state.
+    mode = st.session_state.get("view_mode", "Desktop Mode")
+    
     st.subheader("Test Data Validation")
-    st.write(f"Test ROC AUC: {roc_auc:.2f}")
-    st.write(f"Test Accuracy: {accuracy:.2f}")
-    st.write("Confusion Matrix:")
-    st.write(conf_mat)
+    
+    if mode == "Desktop Mode":
+        # Use columns for horizontal display in desktop mode.
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write(f"Test ROC AUC: {roc_auc:.2f}")
+            st.write(f"Test Accuracy: {accuracy:.2f}")
+        with col2:
+            st.write("Confusion Matrix:")
+            st.write(conf_mat)
+        
+        st.write("ROC Curve:")
+        fig, ax = plt.subplots(figsize=(6,4))
+        ax.plot(fpr, tpr, label=f'ROC Curve (AUC = {roc_auc:.2f})')
+        ax.plot([0, 1], [0, 1], linestyle='--', color='gray')
+        ax.set_xlabel('False Positive Rate')
+        ax.set_ylabel('True Positive Rate')
+        ax.set_title('ROC Curve')
+        ax.legend()
+        st.pyplot(fig)
+    else:
+        # Mobile mode: vertical stacking.
+        st.write(f"Test ROC AUC: {roc_auc:.2f}")
+        st.write(f"Test Accuracy: {accuracy:.2f}")
+        st.write("Confusion Matrix:")
+        st.write(conf_mat)
+        st.write("ROC Curve:")
+        fig, ax = plt.subplots(figsize=(4,3))
+        ax.plot(fpr, tpr, label=f'AUC = {roc_auc:.2f}')
+        ax.plot([0, 1], [0, 1], linestyle='--', color='gray')
+        ax.set_xlabel('FPR')
+        ax.set_ylabel('TPR')
+        ax.set_title('ROC Curve')
+        ax.legend(fontsize=8)
+        st.pyplot(fig)
 
 # ---------------------------
 # Home Page Definition
@@ -333,14 +371,14 @@ def generate_qr(url):
 def toggle_view_mode():
     mode = st.radio("Select View Mode", options=["Desktop Mode", "Mobile Mode"], index=0, key="view_mode")
     if mode == "Mobile Mode":
-        # Mobile view: vertical stacking with small-width containers and column layout.
+        # Mobile view: vertical stacking, smaller font and padding.
         mobile_css = """
         <style>
         .main .block-container {
             max-width: 100% !important;
             padding: 0.5rem !important;
         }
-        /* Force a column layout for charts and controls */
+        /* Force column layout for charts and controls */
         .stHorizontal { 
             flex-direction: column !important;
         }
@@ -351,7 +389,7 @@ def toggle_view_mode():
         """
         st.markdown(mobile_css, unsafe_allow_html=True)
     else:
-        # Desktop view: wider containers with horizontal alignment.
+        # Desktop view: horizontal layout with wider containers.
         desktop_css = """
         <style>
         .main .block-container {
