@@ -2,10 +2,9 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
-from sklearn.metrics import (accuracy_score, confusion_matrix, 
-                             classification_report, roc_auc_score, roc_curve)
+from sklearn.metrics import roc_auc_score
 from imblearn.over_sampling import SMOTE
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -68,6 +67,9 @@ def train_model_page(data, processed_data):
     X = processed_data.drop(['Risk', 'Age'], axis=1)
     y = processed_data['Risk']
     
+    # Convert categorical features to dummies for training.
+    X = pd.get_dummies(X, drop_first=True)
+    
     # Split data into train and test sets
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, stratify=y, random_state=42
@@ -95,7 +97,7 @@ def show_home(data, processed_data):
     st.write("""
         - Handled missing values in savings/checking accounts  
         - Created age groups for better risk segmentation  
-        - Encoded categorical variables with label encoding  
+        - Encoded categorical variables (via dummy variables during training)  
         - Applied SMOTE to handle class imbalance  
     """)
     st.write("Processed Data Preview:")
@@ -139,10 +141,14 @@ def show_risk_prediction(data, processed_data):
     if submitted:
         if os.path.exists('model.pkl'):
             model = joblib.load('model.pkl')
+            # Load additional encoders if available. Otherwise, use empty dict.
             label_encoders = joblib.load('label_encoders.pkl') if os.path.exists('label_encoders.pkl') else {}
-            age_params = joblib.load('age_params.pkl') if os.path.exists('age_params.pkl') else {'bins': [0, 25, 45, 60, 120],
-                                                                                        'labels': ['0-25', '26-45', '46-60', '60+']}
+            age_params = joblib.load('age_params.pkl') if os.path.exists('age_params.pkl') else {
+                'bins': [0, 25, 45, 60, 120], 'labels': ['0-25', '26-45', '46-60', '60+']
+            }
             age_group = pd.cut([age], bins=age_params['bins'], labels=age_params['labels'])[0]
+            
+            # Create input dataframe from user inputs.
             input_data = pd.DataFrame({
                 'Sex': [data['Sex'].mode()[0]],
                 'Job': [data['Job'].mode()[0]],
@@ -158,8 +164,11 @@ def show_risk_prediction(data, processed_data):
             for col in label_encoders:
                 input_data[col] = label_encoders[col].transform(input_data[col].astype(str))
             
-            expected_columns = processed_data.drop(['Risk', 'Age'], axis=1).columns
-            input_data = input_data[expected_columns]
+            # Apply the same dummy-variable transformation as in training.
+            X_expected = pd.get_dummies(processed_data.drop(['Risk', 'Age'], axis=1), drop_first=True).columns
+            input_data = pd.get_dummies(input_data, drop_first=True)
+            # Align columns (fill missing with 0)
+            input_data = input_data.reindex(columns=X_expected, fill_value=0)
             
             probability = model.predict_proba(input_data)[0][1]
             
@@ -173,7 +182,6 @@ def show_risk_prediction(data, processed_data):
             else:
                 risk_level = "Severe High Risk"
             
-            # Display prediction result
             if risk_level == "Low Risk":
                 st.success(f"{risk_level} (Probability: {probability:.2%})")
             elif risk_level == "Medium Risk":
@@ -182,7 +190,7 @@ def show_risk_prediction(data, processed_data):
                 st.error(f"{risk_level} (Probability: {probability:.2%})")
             
             st.write("Key Factors Contributing to Risk:")
-            feature_importance = pd.Series(model.named_steps['classifier'].feature_importances_, index=expected_columns)
+            feature_importance = pd.Series(model.named_steps['classifier'].feature_importances_, index=X_expected)
             top_features = feature_importance.nlargest(3)
             for feat, imp in top_features.items():
                 st.write(f"- {feat}: {imp:.2f}")
