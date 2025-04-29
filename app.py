@@ -2,9 +2,9 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.pipeline import Pipeline
-from sklearn.metrics import roc_auc_score, accuracy_score, confusion_matrix, roc_curve
+from sklearn.metrics import roc_auc_score, accuracy_score, confusion_matrix, roc_curve, classification_report
 from imblearn.over_sampling import SMOTE
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -15,7 +15,6 @@ import joblib
 import opendatasets as od
 import os
 import plotly.express as px
-
 
 # ---------------------------
 # Data Loading & Preprocessing
@@ -36,13 +35,12 @@ def preprocess_data(data):
     
     # Convert risk to binary
     data['Risk'] = data['Risk'].map({'good': 0, 'bad': 1})
-    
     return data
 
 # ---------------------------
-# Model Training Function (GridSearchCV)
+# Model Training Routine: GridSearchCV Wrapped in train_model
 # ---------------------------
-def show_train_model(X_train, y_train):
+def train_model(X, y):
     pipeline = Pipeline([
         ('scaler', StandardScaler()),
         ('classifier', RandomForestClassifier(random_state=42))
@@ -53,91 +51,74 @@ def show_train_model(X_train, y_train):
         'classifier__min_samples_split': [2, 5]
     }
     grid_search = GridSearchCV(pipeline, param_grid, cv=5, scoring='roc_auc', n_jobs=-1)
-    grid_search.fit(X_train, y_train)
+    grid_search.fit(X, y)
     return grid_search.best_estimator_
 
 # ---------------------------
-# Train Model Page
+# Train Model Page with Improved Training & Evaluation
 # ---------------------------
-def train_model_page(data, processed_data):
+def show_train_model(data, processed_data):
     st.title("Train Model")
-    st.write("Training the model using GridSearchCV, SMOTE, and a RandomForestClassifier.")
-    
-    # Create features (X) and target (y)
-    X = processed_data.drop(['Risk', 'Age'], axis=1)
-    y = processed_data['Risk']
-    
-    # Convert categorical features to dummies for training.
-    X = pd.get_dummies(X, drop_first=True)
-    
-    # Split data into train and test sets
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, stratify=y, random_state=42
-    )
-    
-    # Handle class imbalance with SMOTE on the training data
-    smote = SMOTE(random_state=42)
-    X_train_res, y_train_res = smote.fit_resample(X_train, y_train)
-    
-    # Train model using grid search
-    model = show_train_model(X_train_res, y_train_res)
+    with st.spinner("Training Advanced Risk Model..."):
+        # Prepare features & target
+        X = processed_data.drop(['Risk', 'Age'], axis=1)
+        y = processed_data['Risk']
+
+        # Label encoding for categorical columns
+        label_encoders = {}
+        categorical_cols = ['Sex', 'Job', 'Housing', 'Saving accounts', 
+                              'Checking account', 'Purpose', 'AgeGroup']
+        for col in categorical_cols:
+            le = LabelEncoder()
+            X[col] = le.fit_transform(X[col].astype(str))
+            label_encoders[col] = le
+
+        # Split data with fixed random state for reproducibility
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, stratify=y, random_state=42
+        )
+
+        # Handle class imbalance with SMOTE
+        smote = SMOTE(random_state=42)
+        X_res, y_res = smote.fit_resample(X_train, y_train)
+
+        # Train model using grid search (wrapped in train_model)
+        model = train_model(X_res, y_res)
+
+        # Evaluate model on test set
+        y_pred = model.predict(X_test)
+        y_proba = model.predict_proba(X_test)[:, 1]
+
+        # Save trained model and artifacts
+        joblib.dump(model, 'model.pkl')
+        joblib.dump(label_encoders, 'label_encoders.pkl')
+        joblib.dump({'bins': [0, 25, 45, 60, 120],
+                     'labels': ['0-25', '26-45', '46-60', '60+']},
+                    'age_params.pkl')
+
     st.success("Model trained successfully!")
-    
-    # Save the trained model for later use in risk prediction
-    joblib.dump(model, 'model.pkl')
-    st.write("Model saved. You can now use the 'Risk Prediction' tab to assess risk.")
-    
-    # ---------------------------
-    # Test Data Validation
-    # ---------------------------
-    predictions = model.predict(X_test)
-    pred_probs = model.predict_proba(X_test)[:, 1]
-    roc_auc = roc_auc_score(y_test, pred_probs)
-    accuracy = accuracy_score(y_test, predictions)
-    conf_mat = confusion_matrix(y_test, predictions)
-    
-    # Compute ROC Curve
-    fpr, tpr, thresholds = roc_curve(y_test, pred_probs)
-    
-    # Check view mode from the session state.
-    mode = st.session_state.get("view_mode", "Desktop Mode")
-    
-    st.subheader("Test Data Validation")
-    
-    if mode == "Desktop Mode":
-        # Use columns for horizontal display in desktop mode.
-        col1, col2 = st.columns(2)
-        with col1:
-            st.write(f"Test ROC AUC: {roc_auc:.2f}")
-            st.write(f"Test Accuracy: {accuracy:.2f}")
-        with col2:
-            st.write("Confusion Matrix:")
-            st.write(conf_mat)
-        
-        st.write("ROC Curve:")
-        fig, ax = plt.subplots(figsize=(6,4))
-        ax.plot(fpr, tpr, label=f'ROC Curve (AUC = {roc_auc:.2f})')
-        ax.plot([0, 1], [0, 1], linestyle='--', color='gray')
-        ax.set_xlabel('False Positive Rate')
-        ax.set_ylabel('True Positive Rate')
-        ax.set_title('ROC Curve')
-        ax.legend()
-        st.pyplot(fig)
-    else:
-        # Mobile mode: vertical stacking.
-        st.write(f"Test ROC AUC: {roc_auc:.2f}")
-        st.write(f"Test Accuracy: {accuracy:.2f}")
-        st.write("Confusion Matrix:")
-        st.write(conf_mat)
-        st.write("ROC Curve:")
-        fig, ax = plt.subplots(figsize=(4,3))
-        ax.plot(fpr, tpr, label=f'AUC = {roc_auc:.2f}')
-        ax.plot([0, 1], [0, 1], linestyle='--', color='gray')
-        ax.set_xlabel('FPR')
-        ax.set_ylabel('TPR')
-        ax.set_title('ROC Curve')
-        ax.legend(fontsize=8)
-        st.pyplot(fig)
+    st.subheader("Model Performance on Test Data")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.write("**ROC Curve**")
+        fpr, tpr, _ = roc_curve(y_test, y_proba)
+        plt.figure()
+        plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'AUC = {roc_auc_score(y_test, y_proba):.2f}')
+        plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.legend(loc="lower right")
+        st.pyplot(plt.gcf())
+    with col2:
+        st.write("**Confusion Matrix**")
+        cm = confusion_matrix(y_test, y_pred)
+        plt.figure()
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
+        st.pyplot(plt.gcf())
+
+    st.write(f"**ROC AUC Score:** {roc_auc_score(y_test, y_proba):.2f}")
+    st.write("**Classification Report:**")
+    st.code(classification_report(y_test, y_pred))
 
 # ---------------------------
 # Home Page Definition
@@ -149,7 +130,7 @@ def show_home(data, processed_data):
     st.write("""
         - Handled missing values in savings/checking accounts  
         - Created age groups for better risk segmentation  
-        - Encoded categorical variables (via dummy variables during training)  
+        - Encoded categorical variables (via label encoding or dummy variables during training)  
         - Applied SMOTE to handle class imbalance  
     """)
     st.write("Processed Data Preview:")
@@ -176,7 +157,6 @@ def show_risk_prediction(data, processed_data):
         - High Risk  
         - Severe High Risk
     """)
-    # Set threshold sliders with constraint dependencies
     medium_threshold = st.slider("Medium Risk Threshold", min_value=0.0, max_value=1.0, value=0.3, step=0.05)
     high_threshold = st.slider("High Risk Threshold", min_value=medium_threshold, max_value=1.0, value=0.6, step=0.05)
     severe_threshold = st.slider("Severe High Risk Threshold", min_value=high_threshold, max_value=1.0, value=0.8, step=0.05)
@@ -193,14 +173,11 @@ def show_risk_prediction(data, processed_data):
     if submitted:
         if os.path.exists('model.pkl'):
             model = joblib.load('model.pkl')
-            # Load additional encoders if available. Otherwise, use empty dict.
             label_encoders = joblib.load('label_encoders.pkl') if os.path.exists('label_encoders.pkl') else {}
             age_params = joblib.load('age_params.pkl') if os.path.exists('age_params.pkl') else {
                 'bins': [0, 25, 45, 60, 120], 'labels': ['0-25', '26-45', '46-60', '60+']
             }
             age_group = pd.cut([age], bins=age_params['bins'], labels=age_params['labels'])[0]
-            
-            # Create input dataframe from user inputs.
             input_data = pd.DataFrame({
                 'Sex': [data['Sex'].mode()[0]],
                 'Job': [data['Job'].mode()[0]],
@@ -212,19 +189,15 @@ def show_risk_prediction(data, processed_data):
                 'Duration': [duration],
                 'AgeGroup': [age_group]
             })
-            
             for col in label_encoders:
                 input_data[col] = label_encoders[col].transform(input_data[col].astype(str))
             
-            # Apply the same dummy-variable transformation as in training.
+            # Apply same transformation as training (using dummy variables)
             X_expected = pd.get_dummies(processed_data.drop(['Risk', 'Age'], axis=1), drop_first=True).columns
             input_data = pd.get_dummies(input_data, drop_first=True)
-            # Align columns (fill missing with 0)
             input_data = input_data.reindex(columns=X_expected, fill_value=0)
             
             probability = model.predict_proba(input_data)[0][1]
-            
-            # Categorize based on thresholds
             if probability < medium_threshold:
                 risk_level = "Low Risk"
             elif probability < high_threshold:
@@ -255,15 +228,12 @@ def show_risk_prediction(data, processed_data):
 def show_bi_dashboard(data, processed_data):
     st.title("🔍 BI Dashboard")
     st.write("Explore key trends and insights from the credit data. Use the filters below to refine your view.")
-    
-    # Filters in an expander (only for the BI Dashboard tab)
     with st.expander("Filters", expanded=True):
         selected_purpose = st.multiselect(
             "Select Loan Purpose",
             options=data["Purpose"].unique(),
             default=list(data["Purpose"].unique())
         )
-        # Map risk values to descriptive labels
         risk_map = {0: "Good", 1: "Bad"}
         data["RiskLabel"] = data["Risk"].map(risk_map)
         selected_risk = st.multiselect(
@@ -271,82 +241,58 @@ def show_bi_dashboard(data, processed_data):
             options=["Good", "Bad"],
             default=["Good", "Bad"]
         )
-    
-    # Filter the data based on selections
     filtered_data = data[
         (data["Purpose"].isin(selected_purpose)) &
         (data["RiskLabel"].isin(selected_risk))
     ]
-    
-    # Chart 1: Histogram - Distribution of Credit Amount
     fig1 = px.histogram(
         filtered_data, x="Credit amount", nbins=30, 
         title="Distribution of Credit Amount"
     )
     st.plotly_chart(fig1, use_container_width=True)
-    
-    # Chart 2: Scatter Plot - Age vs. Credit Amount colored by Risk
     fig2 = px.scatter(
         filtered_data, x="Age", y="Credit amount", 
         color=filtered_data["RiskLabel"],
         title="Age vs. Credit Amount", labels={"color": "Risk"}
     )
     st.plotly_chart(fig2, use_container_width=True)
-    
-    # Chart 3: Bar Chart - Loan Purpose Frequency
     df_purpose = filtered_data['Purpose'].value_counts().reset_index()
     df_purpose.columns = ['Purpose', 'Count']
     fig3 = px.bar(
         df_purpose, x='Purpose', y='Count',
-        title="Loan Purpose Frequency", 
-        labels={"Purpose": "Purpose", "Count": "Count"}
+        title="Loan Purpose Frequency", labels={"Purpose": "Purpose", "Count": "Count"}
     )
     st.plotly_chart(fig3, use_container_width=True)
-    
-    # Chart 4: Pie Chart - Savings Account Distribution
     fig4 = px.pie(
         filtered_data, names="Saving accounts", 
         title="Saving Accounts Distribution"
     )
     st.plotly_chart(fig4, use_container_width=True)
-    
-    # Additional Chart 5: Histogram - Distribution of Age
     fig5 = px.histogram(
         filtered_data, x="Age", nbins=20, 
         title="Distribution of Age"
     )
     st.plotly_chart(fig5, use_container_width=True)
-    
-    # Additional Chart 6: Box Plot - Credit Amount by Risk Level
     fig6 = px.box(
         filtered_data, x="RiskLabel", y="Credit amount",
-        title="Credit Amount by Risk Level", 
-        labels={"RiskLabel": "Risk Level", "Credit amount": "Credit Amount (€)"}
+        title="Credit Amount by Risk Level", labels={"RiskLabel": "Risk Level", "Credit amount": "Credit Amount (€)"}
     )
     st.plotly_chart(fig6, use_container_width=True)
-    
-    # Additional Chart 7: Box Plot - Credit Amount by Loan Purpose
     fig7 = px.box(
         filtered_data, x="Purpose", y="Credit amount",
-        title="Credit Amount by Loan Purpose", 
-        labels={"Purpose": "Loan Purpose", "Credit amount": "Credit Amount (€)"}
+        title="Credit Amount by Loan Purpose", labels={"Purpose": "Loan Purpose", "Credit amount": "Credit Amount (€)"}
     )
     st.plotly_chart(fig7, use_container_width=True)
-    
-    # Additional Chart 8: Treemap - Loan Purposes by Total Credit Amount
     fig8 = px.treemap(
         filtered_data, path=['Purpose'], values='Credit amount',
         title="Treemap of Loan Purposes by Total Credit Amount"
     )
     st.plotly_chart(fig8, use_container_width=True)
-    
-    # Additional Chart 9: Correlation Heatmap using Seaborn
     corr = filtered_data.select_dtypes(include=[np.number]).corr()
     fig9, ax = plt.subplots(figsize=(8,6))
     sns.heatmap(corr, annot=True, cmap='coolwarm', ax=ax)
     plt.title("Correlation Heatmap")
     st.pyplot(fig9)
-    
     st.write("These interactive charts provide a dynamic view of your credit data. Adjust the filters above to explore different segments.")
 
 # ---------------------------
@@ -371,14 +317,12 @@ def generate_qr(url):
 def toggle_view_mode():
     mode = st.radio("Select View Mode", options=["Desktop Mode", "Mobile Mode"], index=0, key="view_mode")
     if mode == "Mobile Mode":
-        # Mobile view: vertical stacking, smaller font and padding.
         mobile_css = """
         <style>
         .main .block-container {
             max-width: 100% !important;
             padding: 0.5rem !important;
         }
-        /* Force column layout for charts and controls */
         .stHorizontal { 
             flex-direction: column !important;
         }
@@ -389,7 +333,6 @@ def toggle_view_mode():
         """
         st.markdown(mobile_css, unsafe_allow_html=True)
     else:
-        # Desktop view: horizontal layout with wider containers.
         desktop_css = """
         <style>
         .main .block-container {
@@ -408,19 +351,14 @@ def toggle_view_mode():
 # ---------------------------
 def main():
     st.set_page_config(page_title="Advanced Credit Risk Dashboard", layout="wide")
-    
-    # Enable view mode toggle.
     toggle_view_mode()
-    
     data = load_data()
     processed_data = preprocess_data(data)
-    
-    # Use top horizontal tabs for navigation.
     tabs = st.tabs(["Home", "Train Model", "Risk Prediction", "BI Dashboard"])
     with tabs[0]:
         show_home(data, processed_data)
     with tabs[1]:
-        train_model_page(data, processed_data)
+        show_train_model(data, processed_data)
     with tabs[2]:
         show_risk_prediction(data, processed_data)
     with tabs[3]:
