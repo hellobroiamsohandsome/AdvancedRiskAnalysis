@@ -4,7 +4,7 @@ from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, accuracy_score, confusion_matrix
 from imblearn.over_sampling import SMOTE
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -86,6 +86,20 @@ def train_model_page(data, processed_data):
     # Save the trained model for later use in risk prediction
     joblib.dump(model, 'model.pkl')
     st.write("Model saved. You can now use the 'Risk Prediction' tab to assess risk.")
+    
+    # ---------------------------
+    # Test Data Validation (Recovery of deleted part)
+    # ---------------------------
+    predictions = model.predict(X_test)
+    roc_auc = roc_auc_score(y_test, model.predict_proba(X_test)[:, 1])
+    accuracy = accuracy_score(y_test, predictions)
+    conf_mat = confusion_matrix(y_test, predictions)
+    
+    st.subheader("Test Data Validation")
+    st.write(f"Test ROC AUC: {roc_auc:.2f}")
+    st.write(f"Test Accuracy: {accuracy:.2f}")
+    st.write("Confusion Matrix:")
+    st.write(conf_mat)
 
 # ---------------------------
 # Home Page Definition
@@ -319,11 +333,16 @@ def generate_qr(url):
 def toggle_view_mode():
     mode = st.radio("Select View Mode", options=["Desktop Mode", "Mobile Mode"], index=0, key="view_mode")
     if mode == "Mobile Mode":
+        # Mobile view: vertical stacking with small-width containers and column layout.
         mobile_css = """
         <style>
         .main .block-container {
             max-width: 100% !important;
-            padding: 1rem !important;
+            padding: 0.5rem !important;
+        }
+        /* Force a column layout for charts and controls */
+        .stHorizontal { 
+            flex-direction: column !important;
         }
         body {
             font-size: 14px;
@@ -332,6 +351,7 @@ def toggle_view_mode():
         """
         st.markdown(mobile_css, unsafe_allow_html=True)
     else:
+        # Desktop view: wider containers with horizontal alignment.
         desktop_css = """
         <style>
         .main .block-container {
