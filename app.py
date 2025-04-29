@@ -239,57 +239,63 @@ def generate_qr(url):
 # ---------------------------
 
 def show_bi_dashboard(data, processed_data):
-    # Sidebar filters for dynamic dashboard
-    st.sidebar.header("Dashboard Filters")
-    selected_purpose = st.sidebar.multiselect(
-        "Select Loan Purpose",
-        options=data["Purpose"].unique(),
-        default=list(data["Purpose"].unique())
-    )
+    st.title("🔍 BI Dashboard")
+    st.write("Explore key trends and insights from the credit data. Use the filters below to refine your view.")
     
-    # Map numeric risk column to descriptive labels
-    risk_map = {0: "Good", 1: "Bad"}
-    data["RiskLabel"] = data["Risk"].map(risk_map)
-    selected_risk = st.sidebar.multiselect(
-        "Select Risk",
-        options=["Good", "Bad"],
-        default=["Good", "Bad"]
-    )
+    # Use an expander for filters (visible only on this tab)
+    with st.expander("Filters", expanded=True):
+        selected_purpose = st.multiselect(
+            "Select Loan Purpose",
+            options=data["Purpose"].unique(),
+            default=list(data["Purpose"].unique())
+        )
+        # Map risk values to descriptive labels
+        risk_map = {0: "Good", 1: "Bad"}
+        data["RiskLabel"] = data["Risk"].map(risk_map)
+        selected_risk = st.multiselect(
+            "Select Risk",
+            options=["Good", "Bad"],
+            default=["Good", "Bad"]
+        )
     
-    # Filter data based on sidebar selections
+    # Filter data based on expander selections
     filtered_data = data[
         (data["Purpose"].isin(selected_purpose)) &
         (data["RiskLabel"].isin(selected_risk))
     ]
     
-    st.title("🔍 BI Dashboard")
-    st.write("Explore key trends and insights from the credit data. Use the filters on the sidebar to refine your view.")
-    
     # Example 1: Distribution of Credit Amount
-    fig1 = px.histogram(filtered_data, x="Credit amount", nbins=30, 
-                        title="Distribution of Credit Amount")
+    fig1 = px.histogram(
+        filtered_data, x="Credit amount", nbins=30, 
+        title="Distribution of Credit Amount"
+    )
     st.plotly_chart(fig1, use_container_width=True)
     
     # Example 2: Age vs. Credit Amount Scatter Plot colored by Risk
-    fig2 = px.scatter(filtered_data, x="Age", y="Credit amount", 
-                      color=filtered_data["RiskLabel"],
-                      title="Age vs. Credit Amount", labels={"color": "Risk"})
+    fig2 = px.scatter(
+        filtered_data, x="Age", y="Credit amount", 
+        color=filtered_data["RiskLabel"],
+        title="Age vs. Credit Amount", labels={"color": "Risk"}
+    )
     st.plotly_chart(fig2, use_container_width=True)
     
     # Example 3: Bar Chart of Purpose Count
     df_purpose = filtered_data['Purpose'].value_counts().reset_index()
     df_purpose.columns = ['Purpose', 'Count']  # Rename columns for clarity
-    fig3 = px.bar(df_purpose, x='Purpose', y='Count',
-                  title="Loan Purpose Frequency", 
-                  labels={"Purpose": "Purpose", "Count": "Count"})
+    fig3 = px.bar(
+        df_purpose, x='Purpose', y='Count',
+        title="Loan Purpose Frequency", 
+        labels={"Purpose": "Purpose", "Count": "Count"}
+    )
     st.plotly_chart(fig3, use_container_width=True)
     
     # Example 4: Pie Chart of Savings Account Distribution
-    fig4 = px.pie(filtered_data, names="Saving accounts", 
-                  title="Saving Accounts Distribution")
+    fig4 = px.pie(
+        filtered_data, names="Saving accounts", 
+        title="Saving Accounts Distribution"
+    )
     st.plotly_chart(fig4, use_container_width=True)
     
-    st.write("These interactive charts provide a dynamic view of your credit data. Adjust the filters in the sidebar to explore different segments.")
 
 
 # ---------------------------
