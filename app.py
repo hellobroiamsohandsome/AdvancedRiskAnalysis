@@ -43,7 +43,7 @@ def preprocess_data(data):
 # ---------------------------
 # Model Training
 # ---------------------------
-def train_model(X_train, y_train):
+def show_train_model(X_train, y_train):
     pipeline = Pipeline([
         ('scaler', StandardScaler()),
         ('classifier', RandomForestClassifier(random_state=42))
