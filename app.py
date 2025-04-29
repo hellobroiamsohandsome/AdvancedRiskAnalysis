@@ -375,8 +375,44 @@ def show_bi_dashboard(data, processed_data):
     sns.heatmap(corr, annot=True, cmap='coolwarm', ax=ax)
     plt.title("Correlation Heatmap")
     st.pyplot(fig9)
-    
-    
+
+# ---------------------------
+# Toggle View Mode
+# ---------------------------
+
+def toggle_view_mode():
+    # Let the user select view mode.
+    mode = st.radio("Select View Mode", options=["Desktop Mode", "Mobile Mode"], index=0, key="view_mode")
+    if mode == "Mobile Mode":
+        # Mobile-friendly CSS: narrow container and smaller paddings.
+        mobile_css = """
+        <style>
+        /* Adjust the main container to be full width and reduce padding */
+        .main .block-container {
+            max-width: 100% !important;
+            padding: 1rem !important;
+        }
+        /* Optionally, reduce font-size for a mobile feel */
+        body {
+            font-size: 14px;
+        }
+        </style>
+        """
+        st.markdown(mobile_css, unsafe_allow_html=True)
+    else:
+        # Desktop-up CSS: wider container and larger paddings.
+        desktop_css = """
+        <style>
+        .main .block-container {
+            max-width: 1200px !important;
+            padding: 2rem !important;
+        }
+        body {
+            font-size: 16px;
+        }
+        </style>
+        """
+        st.markdown(desktop_css, unsafe_allow_html=True)
 
 
 # ---------------------------
@@ -385,10 +421,13 @@ def show_bi_dashboard(data, processed_data):
 def main():
     st.set_page_config(page_title="Advanced Credit Risk Dashboard", layout="wide")
     
+    # Allow user to toggle view mode.
+    toggle_view_mode()
+    
     data = load_data()
     processed_data = preprocess_data(data)
     
-    # Use top horizontal tabs for navigation, user-friendly for mobile devices.
+    # Use top horizontal tabs for navigation.
     tabs = st.tabs(["Home", "Train Model", "Risk Prediction", "BI Dashboard"])
     with tabs[0]:
         show_home(data, processed_data)
