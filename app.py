@@ -242,7 +242,7 @@ def show_bi_dashboard(data, processed_data):
     st.title("🔍 BI Dashboard")
     st.write("Explore key trends and insights from the credit data. Use the filters below to refine your view.")
     
-    # Use an expander for filters (visible only on this tab)
+    # Filters in an expander (only on BI Dashboard tab)
     with st.expander("Filters", expanded=True):
         selected_purpose = st.multiselect(
             "Select Loan Purpose",
@@ -258,28 +258,29 @@ def show_bi_dashboard(data, processed_data):
             default=["Good", "Bad"]
         )
     
-    # Filter data based on expander selections
+    # Filter data according to the selections
     filtered_data = data[
         (data["Purpose"].isin(selected_purpose)) &
         (data["RiskLabel"].isin(selected_risk))
     ]
     
-    # Example 1: Distribution of Credit Amount
+    # Chart 1: Distribution of Credit Amount
     fig1 = px.histogram(
         filtered_data, x="Credit amount", nbins=30, 
         title="Distribution of Credit Amount"
     )
     st.plotly_chart(fig1, use_container_width=True)
     
-    # Example 2: Age vs. Credit Amount Scatter Plot colored by Risk
+    # Chart 2: Age vs. Credit Amount Scatter Plot colored by Risk
     fig2 = px.scatter(
         filtered_data, x="Age", y="Credit amount", 
         color=filtered_data["RiskLabel"],
-        title="Age vs. Credit Amount", labels={"color": "Risk"}
+        title="Age vs. Credit Amount", 
+        labels={"color": "Risk"}
     )
     st.plotly_chart(fig2, use_container_width=True)
     
-    # Example 3: Bar Chart of Purpose Count
+    # Chart 3: Bar Chart of Loan Purpose Frequency
     df_purpose = filtered_data['Purpose'].value_counts().reset_index()
     df_purpose.columns = ['Purpose', 'Count']  # Rename columns for clarity
     fig3 = px.bar(
@@ -289,12 +290,51 @@ def show_bi_dashboard(data, processed_data):
     )
     st.plotly_chart(fig3, use_container_width=True)
     
-    # Example 4: Pie Chart of Savings Account Distribution
+    # Chart 4: Pie Chart of Savings Account Distribution
     fig4 = px.pie(
         filtered_data, names="Saving accounts", 
         title="Saving Accounts Distribution"
     )
     st.plotly_chart(fig4, use_container_width=True)
+    
+    # Additional Chart 5: Distribution of Age
+    fig5 = px.histogram(
+        filtered_data, x="Age", nbins=20, 
+        title="Distribution of Age"
+    )
+    st.plotly_chart(fig5, use_container_width=True)
+    
+    # Additional Chart 6: Box Plot of Credit Amount by Risk
+    fig6 = px.box(
+        filtered_data, x="RiskLabel", y="Credit amount",
+        title="Credit Amount by Risk Level", 
+        labels={"RiskLabel": "Risk Level", "Credit amount": "Credit Amount (€)"}
+    )
+    st.plotly_chart(fig6, use_container_width=True)
+    
+    # Additional Chart 7: Box Plot of Credit Amount by Loan Purpose
+    fig7 = px.box(
+        filtered_data, x="Purpose", y="Credit amount",
+        title="Credit Amount by Loan Purpose", 
+        labels={"Purpose": "Loan Purpose", "Credit amount": "Credit Amount (€)"}
+    )
+    st.plotly_chart(fig7, use_container_width=True)
+    
+    # Additional Chart 8: Treemap of Loan Purposes by Total Credit Amount
+    fig8 = px.treemap(
+        filtered_data, path=['Purpose'], values='Credit amount',
+        title="Treemap of Loan Purposes by Total Credit Amount"
+    )
+    st.plotly_chart(fig8, use_container_width=True)
+    
+    # Additional Chart 9: Correlation Heatmap (using seaborn)
+    # Select only the numeric columns
+    corr = filtered_data.select_dtypes(include=[np.number]).corr()
+    fig9, ax = plt.subplots(figsize=(8,6))
+    sns.heatmap(corr, annot=True, cmap='coolwarm', ax=ax)
+    plt.title("Correlation Heatmap")
+    st.pyplot(fig9)
+    
     
 
 
