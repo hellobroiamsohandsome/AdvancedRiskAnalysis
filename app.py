@@ -130,7 +130,7 @@ def show_home(data, processed_data):
     st.write("""
         - Handled missing values in savings/checking accounts  
         - Created age groups for better risk segmentation  
-        - Encoded categorical variables (via label encoding or dummy variables during training)  
+        - Encoded categorical variables (via label encoding during training)  
         - Applied SMOTE to handle class imbalance  
     """)
     st.write("Processed Data Preview:")
@@ -175,9 +175,12 @@ def show_risk_prediction(data, processed_data):
             model = joblib.load('model.pkl')
             label_encoders = joblib.load('label_encoders.pkl') if os.path.exists('label_encoders.pkl') else {}
             age_params = joblib.load('age_params.pkl') if os.path.exists('age_params.pkl') else {
-                'bins': [0, 25, 45, 60, 120], 'labels': ['0-25', '26-45', '46-60', '60+']
+                'bins': [0, 25, 45, 60, 120],
+                'labels': ['0-25', '26-45', '46-60', '60+']
             }
             age_group = pd.cut([age], bins=age_params['bins'], labels=age_params['labels'])[0]
+            
+            # Create input dataframe from user inputs.
             input_data = pd.DataFrame({
                 'Sex': [data['Sex'].mode()[0]],
                 'Job': [data['Job'].mode()[0]],
@@ -189,12 +192,13 @@ def show_risk_prediction(data, processed_data):
                 'Duration': [duration],
                 'AgeGroup': [age_group]
             })
+            
+            # Apply stored label encoders as done during training.
             for col in label_encoders:
                 input_data[col] = label_encoders[col].transform(input_data[col].astype(str))
             
-            # Apply same transformation as training (using dummy variables)
-            X_expected = pd.get_dummies(processed_data.drop(['Risk', 'Age'], axis=1), drop_first=True).columns
-            input_data = pd.get_dummies(input_data, drop_first=True)
+            # Use the same feature set as used in model training.
+            X_expected = processed_data.drop(['Risk', 'Age'], axis=1).columns
             input_data = input_data.reindex(columns=X_expected, fill_value=0)
             
             probability = model.predict_proba(input_data)[0][1]
